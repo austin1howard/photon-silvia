@@ -28,7 +28,7 @@ DallasTemperature sensors(&oneWire);
 DeviceAddress sensorAddress;
 
 // PID params
-double kp = 1;
+double kp = 60;
 double ki = 0;
 double kd = 0;
 
@@ -39,12 +39,8 @@ double setpoint, input, output;
 PID myPID(&input, &output, &setpoint, kp, ki, kd, PID::DIRECT);
 
 // "window" size. Basically the duration of our slow PWMesque control.
-#ifndef WINDOW_SIZE
-#define WINDOW_SIZE 1000
-#endif
-
+int windowSize = 3000;
 unsigned long windowStartTime;
-
 
 void setup() {
   Particle.publish("photon-silvia", "Starting");
@@ -62,7 +58,8 @@ void setup() {
 
   // we also expose the vars for monitoring
   Particle.variable("currentTemp", input);
-  Particle.variable("boilerPower", 100.0 * output / WINDOW_SIZE);
+  Particle.variable("boilerPower", output);
+  Particle.variable("windowSize", windowSize);
 
   // get the sensor's address
   sensors.getAddress(sensorAddress, 0);
@@ -80,13 +77,16 @@ void setup() {
   setpoint = BREW_SETPOINT;
 
   //tell the PID to range between 0 and the full window size
-  myPID.SetOutputLimits(0, WINDOW_SIZE);
+  myPID.SetOutputLimits(0, windowSize);
 
   //turn the PID on
   myPID.SetMode(PID::AUTOMATIC);
 
   // start our "PWM" window
   windowStartTime = millis();
+
+  // init the pin
+  pinMode(RELAY_PIN, OUTPUT);
 }
 
   // String temperatureStr = String(input);
@@ -100,12 +100,12 @@ void loop() {
   /************************************************
    * turn the output pin on/off based on pid analog output
    ************************************************/
-  if (millis() - windowStartTime > WINDOW_SIZE) {
+  if (millis() - windowStartTime > windowSize) {
     // time to shift the Relay Window
-    windowStartTime += WINDOW_SIZE;
+    windowStartTime += windowSize;
   }
 
-  if (output < millis() - windowStartTime) {
+  if (output > millis() - windowStartTime) {
     digitalWrite(RELAY_PIN,HIGH);
   } else {
     digitalWrite(RELAY_PIN,LOW);
