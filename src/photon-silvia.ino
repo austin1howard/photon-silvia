@@ -11,7 +11,7 @@
 #endif
 
 #ifndef BREW_SETPOINT
-#define BREW_SETPOINT 85
+#define BREW_SETPOINT 90
 #endif
 
 #ifndef STEAM_SETPOINT
@@ -39,7 +39,7 @@ double setpoint, input, output;
 PID myPID(&input, &output, &setpoint, kp, ki, kd, PID::DIRECT);
 
 // "window" size. Basically the duration of our slow PWMesque control.
-int windowSize = 3000;
+unsigned long windowSize = 5000;
 unsigned long windowStartTime;
 
 void setup() {
@@ -60,6 +60,11 @@ void setup() {
   Particle.variable("currentTemp", input);
   Particle.variable("boilerPower", output);
   Particle.variable("windowSize", windowSize);
+
+  // allow for PID param updates
+  Particle.function("updateP", updateP);
+  Particle.function("updateI", updateI);
+  Particle.function("updateD", updateD);
 
   // get the sensor's address
   sensors.getAddress(sensorAddress, 0);
@@ -102,10 +107,10 @@ void loop() {
    ************************************************/
   if (millis() - windowStartTime > windowSize) {
     // time to shift the Relay Window
-    windowStartTime += windowSize;
+    windowStartTime = millis();
   }
 
-  if (output > millis() - windowStartTime) {
+  if (((unsigned long) output) > millis() - windowStartTime) {
     digitalWrite(RELAY_PIN,HIGH);
   } else {
     digitalWrite(RELAY_PIN,LOW);
@@ -130,4 +135,20 @@ void updateInputTemperature(bool wait) {
     }
 
   }
+}
+
+int updateP(String params) {
+  double param = (double) params.toFloat();
+  myPID.SetTunings(param, myPID.GetKi(), myPID.GetKd());
+  return 0;
+}
+int updateI(String params) {
+  double param = (double) params.toFloat();
+  myPID.SetTunings(myPID.GetKp(), param, myPID.GetKd());
+  return 0;
+}
+int updateD(String params) {
+  double param = (double) params.toFloat();
+  myPID.SetTunings(myPID.GetKp(), myPID.GetKi(), param);
+  return 0;
 }
